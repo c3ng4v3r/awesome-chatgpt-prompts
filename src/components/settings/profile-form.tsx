@@ -16,6 +16,44 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { toast } from "sonner";
 import { analyticsProfile } from "@/lib/analytics";
 
+// Allowed image extensions for avatar URLs
+const ALLOWED_IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'];
+
+/**
+ * Validates avatar URL for security:
+ * - Must use https:// protocol only
+ * - Must have a valid image file extension in the path (before query params)
+ * - Prevents data: URIs and other malicious schemes
+ */
+const avatarUrlSchema = z.string().refine((value) => {
+  // Allow empty string (no avatar)
+  if (value === '') return true;
+
+  try {
+    const url = new URL(value);
+
+    // Only allow https:// protocol
+    if (url.protocol !== 'https:') {
+      return false;
+    }
+
+    // Get the pathname (without query parameters)
+    const pathname = url.pathname.toLowerCase();
+
+    // Check if path ends with an allowed image extension
+    const hasValidExtension = ALLOWED_IMAGE_EXTENSIONS.some(ext =>
+      pathname.endsWith(ext)
+    );
+
+    return hasValidExtension;
+  } catch {
+    // Invalid URL
+    return false;
+  }
+}, {
+  message: "Avatar URL must use https:// and end with a valid image extension (.png, .jpg, .jpeg, .gif, .webp, .svg)"
+});
+
 const profileSchema = z.object({
   name: z.string().min(1, "Name is required").max(100),
   username: z
@@ -23,7 +61,7 @@ const profileSchema = z.object({
     .min(1, "Username is required")
     .max(30)
     .regex(/^[a-zA-Z0-9_]+$/, "Username can only contain letters, numbers, and underscores"),
-  avatar: z.string().url().optional().or(z.literal("")),
+  avatar: avatarUrlSchema.optional().or(z.literal("")),
 });
 
 type ProfileFormValues = z.infer<typeof profileSchema>;

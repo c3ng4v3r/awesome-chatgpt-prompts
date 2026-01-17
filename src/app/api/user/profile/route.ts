@@ -3,6 +3,44 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 
+// Allowed image extensions for avatar URLs
+const ALLOWED_IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'];
+
+/**
+ * Validates avatar URL for security:
+ * - Must use https:// protocol only
+ * - Must have a valid image file extension in the path (before query params)
+ * - Prevents data: URIs and other malicious schemes
+ */
+const avatarUrlSchema = z.string().refine((value) => {
+  // Allow empty string (no avatar)
+  if (value === '') return true;
+  
+  try {
+    const url = new URL(value);
+    
+    // Only allow https:// protocol
+    if (url.protocol !== 'https:') {
+      return false;
+    }
+    
+    // Get the pathname (without query parameters)
+    const pathname = url.pathname.toLowerCase();
+    
+    // Check if path ends with an allowed image extension
+    const hasValidExtension = ALLOWED_IMAGE_EXTENSIONS.some(ext => 
+      pathname.endsWith(ext)
+    );
+    
+    return hasValidExtension;
+  } catch {
+    // Invalid URL
+    return false;
+  }
+}, {
+  message: "Avatar URL must use https:// and end with a valid image extension (.png, .jpg, .jpeg, .gif, .webp, .svg)"
+});
+
 const updateProfileSchema = z.object({
   name: z.string().min(1).max(100),
   username: z
@@ -10,7 +48,7 @@ const updateProfileSchema = z.object({
     .min(1)
     .max(30)
     .regex(/^[a-zA-Z0-9_]+$/),
-  avatar: z.string().url().optional().or(z.literal("")),
+  avatar: avatarUrlSchema.optional().or(z.literal("")),
 });
 
 export async function PATCH(request: NextRequest) {

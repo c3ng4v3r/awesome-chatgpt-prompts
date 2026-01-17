@@ -335,4 +335,129 @@ describe("PATCH /api/user/profile", () => {
 
     expect(response.status).toBe(200);
   });
+
+  // Avatar URL security validation tests
+  it("should reject data: URI in avatar URL (XSS prevention)", async () => {
+    vi.mocked(auth).mockResolvedValue({ user: { id: "user1", username: "testuser" } } as never);
+
+    const request = new Request("http://localhost:3000/api/user/profile", {
+      method: "PATCH",
+      body: JSON.stringify({
+        name: "Test",
+        username: "testuser",
+        avatar: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxzY3JpcHQ+YWxlcnQoMSk8L3NjcmlwdD48L3N2Zz4=",
+      }),
+    });
+
+    const response = await PATCH(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data.error).toBe("validation_error");
+  });
+
+  it("should reject http:// protocol in avatar URL", async () => {
+    vi.mocked(auth).mockResolvedValue({ user: { id: "user1", username: "testuser" } } as never);
+
+    const request = new Request("http://localhost:3000/api/user/profile", {
+      method: "PATCH",
+      body: JSON.stringify({
+        name: "Test",
+        username: "testuser",
+        avatar: "http://example.com/avatar.png",
+      }),
+    });
+
+    const response = await PATCH(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data.error).toBe("validation_error");
+  });
+
+  it("should reject avatar URL without valid image extension", async () => {
+    vi.mocked(auth).mockResolvedValue({ user: { id: "user1", username: "testuser" } } as never);
+
+    const request = new Request("http://localhost:3000/api/user/profile", {
+      method: "PATCH",
+      body: JSON.stringify({
+        name: "Test",
+        username: "testuser",
+        avatar: "https://example.com/malicious.html",
+      }),
+    });
+
+    const response = await PATCH(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data.error).toBe("validation_error");
+  });
+
+  it("should accept valid https:// avatar URL with image extension", async () => {
+    vi.mocked(auth).mockResolvedValue({ user: { id: "user1", username: "testuser" } } as never);
+    vi.mocked(db.user.update).mockResolvedValue({
+      id: "user1",
+      name: "Test",
+      username: "testuser",
+      email: "test@example.com",
+      avatar: "https://example.com/avatar.png",
+    } as never);
+
+    const request = new Request("http://localhost:3000/api/user/profile", {
+      method: "PATCH",
+      body: JSON.stringify({
+        name: "Test",
+        username: "testuser",
+        avatar: "https://example.com/avatar.png",
+      }),
+    });
+
+    const response = await PATCH(request);
+
+    expect(response.status).toBe(200);
+  });
+
+  it("should accept https:// avatar URL with query parameters", async () => {
+    vi.mocked(auth).mockResolvedValue({ user: { id: "user1", username: "testuser" } } as never);
+    vi.mocked(db.user.update).mockResolvedValue({
+      id: "user1",
+      name: "Test",
+      username: "testuser",
+      email: "test@example.com",
+      avatar: "https://example.com/avatar.jpg?size=200&format=webp",
+    } as never);
+
+    const request = new Request("http://localhost:3000/api/user/profile", {
+      method: "PATCH",
+      body: JSON.stringify({
+        name: "Test",
+        username: "testuser",
+        avatar: "https://example.com/avatar.jpg?size=200&format=webp",
+      }),
+    });
+
+    const response = await PATCH(request);
+
+    expect(response.status).toBe(200);
+  });
+
+  it("should reject javascript: protocol in avatar URL", async () => {
+    vi.mocked(auth).mockResolvedValue({ user: { id: "user1", username: "testuser" } } as never);
+
+    const request = new Request("http://localhost:3000/api/user/profile", {
+      method: "PATCH",
+      body: JSON.stringify({
+        name: "Test",
+        username: "testuser",
+        avatar: "javascript:alert('xss')",
+      }),
+    });
+
+    const response = await PATCH(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data.error).toBe("validation_error");
+  });
 });
